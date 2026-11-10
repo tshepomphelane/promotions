@@ -1,0 +1,53 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: promotion-postgres
+    environment:
+      POOSTGRES_DB: promotions
+      POOSTGRES_USER: promotion
+      POOSTGRES_PASSWORD: promotion
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U promotion -d promotions"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  fake-profile-api:
+    build:
+      context: ./services/fake-profile-api
+    container_name: fake-profile-api
+    environment:
+      FAILURE_MODE: none
+      DELAY_SECONDS: 3
+      CONTROL_TOKEN: local-assessment-token
+    ports:
+      - "8000:8001"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:80001/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  promotion-api:
+    build:
+      context: ./services/promotion-api
+    container_name: promotion-api
+    environment:
+      DATABASE_URL: postgresql+psycopg://promotion:promotion@postgres:5432/promotions
+      PROFILE_SERVICE_URL: http://fake-profile-api:8001
+    ports:
+      - "8000:8001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      fake-profile-api:
+        condition: service_healthy
+    restart: unless-stopped
+
+    volumes:
+      postgres_data:
