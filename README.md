@@ -1,0 +1,2 @@
+# promotions
+Promotions-service
