@@ -13,7 +13,7 @@ VALUES
     ('CUST-003', 10, 5000.00);
 
 INSERT INTO promotions
-    (id, description, discount_percent, minimum_purchase, minimun_spend, active)
+    (id, description, discount_percent, minimum_purchases, minimum_spend, active)
 VALUES 
     ('WELCOME001', 'Welcome discount', 10, 3, 1500.00, TRUE),
     ('VIP-CUST', 'VIP customer discount', 30, 9, 5000.00, TRUE),

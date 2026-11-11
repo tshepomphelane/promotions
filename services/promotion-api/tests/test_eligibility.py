@@ -11,9 +11,9 @@ def test_customer_qualifies_for_promotion():
 
     promotion = SimpleNamespace(
         id = "WELCOME001",
-        desciption = "Welcome discount",
+        description = "Welcome discount",
         discount_percent=10,
-        minimum_purchase=3,
+        minimum_purchases=3,
         minimum_spend=Decimal("1000.00"),
         active=True
     )
@@ -31,9 +31,9 @@ def test_customer_does_not_qualify():
 
     promotion = SimpleNamespace(
         id = "WELCOME001",
-        desciption = "Welcome discount",
+        description = "Welcome discount",
         discount_percent=10,
-        minimum_purchase=3,
+        minimum_purchases=3,
         minimum_spend=Decimal("1000.00"),
         active=True
     )

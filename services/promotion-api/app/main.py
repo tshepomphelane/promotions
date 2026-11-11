@@ -5,7 +5,7 @@ from fastapi import FastAPI, HTTPException
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.database import Base, engine, SessionLocal
-from app.models import Customer, CustomerActivity, Promotorion
+from app.models import Customer, CustomerActivity, Promotion
 from app.eligibility import evaluate_eligibility
 
 app = FastAPI(
@@ -14,27 +14,27 @@ app = FastAPI(
 )
 
 PROFILE_SERVICE_URL = os.getenv(
-    "PROFILE_SERVICE",
-    "htpp://localhost:8001"
+    "PROFILE_SERVICE_URL",
+    "http://localhost:8001"
 )
 
 profile_client = httpx.Client(
-    timeout = httpx.Timeout(1.0),
-    limits = httpx.limits(
+    timeout=httpx.Timeout(1.0),
+    limits=httpx.Limits(
         max_connections=50,
         max_keepalive_connections=20
     )
 )
 
 @app.on_event("startup")
-def start():
+def startup():
     Base.metadata.create_all(bind=engine)
 
 @app.on_event("shutdown")
 def shutdown():
-    Base.metadata.create_all(bind=engine)
+    profile_client.close()
 
-@app.get("health")
+@app.get("/health")
 def health():
     return {"status": "healthy"}
 
@@ -43,7 +43,7 @@ def get_promotions(customer_id: str):
 
     # Call external dependency
     try:
-        response = httpx.get(
+        response = profile_client.get(
             f"{PROFILE_SERVICE_URL}/customers/{customer_id}/status"
         )
 
@@ -82,7 +82,7 @@ def get_promotions(customer_id: str):
             if not customer:
                 raise HTTPException(
                     status_code=404,
-                    details="Customer not found"
+                    detail="Customer not found"
                 )
 
             activity = db.query(CustomerActivity).filter(
@@ -95,11 +95,11 @@ def get_promotions(customer_id: str):
                     detail="Customer activity not found"
                 )
 
-            promotions = db.query(Promotorion).filter(
-                Promotorion.active.is_(True)
+            promotions = db.query(Promotion).filter(
+                Promotion.active.is_(True)
             ).all()
 
-            eligible = evaluate_eligibility(activity, promotions)
+            eligible = evaluate_eligibility(activity,promotions)
 
             return {
                 "customer_id": customer_id,

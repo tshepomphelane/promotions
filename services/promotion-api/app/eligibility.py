@@ -7,7 +7,7 @@ def evaluate_eligibility(activity, promotions):
         if not promotion.active:
             continue
 
-        if activity.purchase_count < promotion.minimum_purchase:
+        if activity.purchase_count < promotion.minimum_purchases:
             continue
 
         if activity.total_spend < Decimal(str(promotion.minimum_spend)):
