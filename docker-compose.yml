@@ -57,5 +57,14 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  prometheus:
+    build:
+      context: ./observability/prometheus
+    ports:
+      - "19090:9090"
+    depends_on:
+      promotion-api:
+        condition: service_healthy
+
 volumes:
   postgres_data:

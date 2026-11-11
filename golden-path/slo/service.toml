@@ -1,0 +1,15 @@
+#
+# product team can only change this file
+# generator creates promethues recording rules and burn rate alerts from this
+#
+
+service = "promotion-api"
+job = "promotion-api"
+route = "/customers/{customer_id}/promotions"
+
+target = 0.999
+window = "28d"
+latency_threshold_seconds = 0.3
+
+owner = "crm"
+runbook = "docs/runbooks/promotion-api.md"

@@ -113,18 +113,18 @@ def get_promotions(customer_id: str):
             detail="Database temporarily unavailable"
         )
     
-@app.middleware("http")
-async def request_metrics(request, call_next):
-    started = time.perf_counter()
-    status_code = 500
-    try:
-        response = await call_next(request)
-        status_code = response.status_code
-        return response
-    finally:
-        record_request(
-            method=request.method,
-            route=route_template(request),
-            status_code=status_code,
-            elapsed=time.perf_counter() - started,
-        )
+# @app.middleware("http")
+# async def request_metrics(request, call_next):
+#     started = time.perf_counter()
+#     status_code = 500
+#     try:
+#         response = await call_next(request)
+#         status_code = response.status_code
+#         return response
+#     finally:
+#         record_request(
+#             method=request.method,
+#             route=route_template(request),
+#             status_code=status_code,
+#             elapsed=time.perf_counter() - started,
+#         )
