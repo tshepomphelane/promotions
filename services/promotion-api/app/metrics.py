@@ -2,13 +2,13 @@ from prometheus_client import Counter, Gauge, Histogram, CONTENT_TYPE_LATEST, ge
 from starlette.requests import Request
 from starlette.responses import Response
 
-HTTP_REQUSTS = Counter(
+HTTP_REQUESTS = Counter(
     "http_server_requests_total",
     "HTTP request handled by promotion-API",
     ("method", "route", "status_code"),
 )
 
-HTTP_REQUSTS_DURATION = Histogram(
+HTTP_REQUESTS_DURATION = Histogram(
     "http_server_request_duration_seconds",
     "HTTP request duration in seconds",
     ("method", "route"),

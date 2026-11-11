@@ -1,5 +1,6 @@
 import os
 import httpx
+import time
 
 from fastapi import FastAPI, HTTPException
 from sqlalchemy.exc import SQLAlchemyError
@@ -110,4 +111,20 @@ def get_promotions(customer_id: str):
         raise HTTPException(
             status_code=503,
             detail="Database temporarily unavailable"
+        )
+    
+@app.middleware("http")
+async def request_metrics(request, call_next):
+    started = time.perf_counter()
+    status_code = 500
+    try:
+        response = await call_next(request)
+        status_code = response.status_code
+        return response
+    finally:
+        record_request(
+            method=request.method,
+            route=route_template(request),
+            status_code=status_code,
+            elapsed=time.perf_counter() - started,
         )

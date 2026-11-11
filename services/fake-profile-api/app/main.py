@@ -1,10 +1,13 @@
 import os
 import asyncio
 import secrets
+import time
 from typing import Literal
 
-from fastapi import FastAPI, HTTPException, Header
+from fastapi import FastAPI, HTTPException, Header, Request
 from pydantic import BaseModel, Field
+
+from app.metrics import metrics_response, record_request
 
 app = FastAPI(title="Fake Customer Profile API")
 
@@ -24,9 +27,39 @@ class FailureConfig(BaseModel):
     mode: Literal["none", "slow", "error", "unauthorized"]
     delay_seconds: float = Field(default=3, ge=0, le=30)
 
+def require_control_token(x_test_control_token: str) -> None:
+    # Keep fault injection unavailable unless enabled and authorised
+    if not CONTROL_TOKEN:
+        raise HTTPException(status_code=404, detail="Failure simulation is disabled")
+
+    if not secrets.compare_digest(x_test_control_token, CONTROL_TOKEN):
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+@app.middleware("http")
+async def request_metrics(request: Request, call_next):
+    started = time.perf_counter()
+    status_code = 500
+
+    try:
+        response = await call_next(request)
+        status_code = response.status_code
+        return response
+    finally:
+        route = getattr(request.scope.get("route"), "path", "unmatched")
+        record_request(
+            method=request.method,
+            route=route,
+            status_code=status_code,
+            elapsed=time.perf_counter() - started,
+        )
+
 @app.get("/health")
 def health():
     return {"status": "healthy"}
+
+@app.get("/metrics", include_in_schema=False)
+def metrics():
+    return metrics_response()
 
 @app.post("/__test/failure-mode")
 def set_failure_mode(
@@ -35,29 +68,24 @@ def set_failure_mode(
 ):
     global FAILURE_MODE, DELAY_SECONDS
 
-    # do not allow failure simulation without a config token
-    # Never allow failure simulation without a configured token.
-    if not CONTROL_TOKEN:
-        raise HTTPException(
-            status_code=404,
-            detail="Failure simulation is disabled"
-        )
-
-    if not secrets.compare_digest(
-        x_test_control_token,
-        CONTROL_TOKEN
-    ):
-        raise HTTPException(
-            status_code=403,
-            detail="Forbidden"
-        )
+    require_control_token(x_test_control_token)
 
     FAILURE_MODE = config.mode
     DELAY_SECONDS = config.delay_seconds
 
     return {
         "failure_mode": FAILURE_MODE,
-        "delay_seconds": DELAY_SECONDS
+        "delay_seconds": DELAY_SECONDS,
+    }
+
+@app.get("/__test/failure-mode")
+def get_failure_mode(x_test_control_token: str = Header(default="")):
+    # verify injected failure state via a load test
+    require_control_token(x_test_control_token)
+
+    return {
+        "failure_mode": FAILURE_MODE,
+        "delay_seconds": DELAY_SECONDS,
     }
 
 @app.get("/customers/{customer_id}/status")
