@@ -25,6 +25,8 @@ services:
       FAILURE_MODE: none
       DELAY_SECONDS: 3
       CONTROL_TOKEN: local-assessment-token
+      OTEL_EXPORTER_OTLP_ENDPOINT: otel-collector:4317
+      OTEL_TRACE_SAMPLE_RATIO: 1.0
     ports:
       - "8001:8001"
     healthcheck:
@@ -43,6 +45,8 @@ services:
       DB_POOL_SIZE: 5
       DB_MAX_OVERFLOW: 0
       DB_POOL_TIMEOUT_SECONDS: 2
+      OTEL_EXPORTER_OTLP_ENDPOINT: otel-collector:4317
+      OTEL_TRACE_SAMPLE_RATIO: 1.0
     ports:
       - "8000:8000"
     healthcheck:
@@ -65,6 +69,31 @@ services:
     depends_on:
       promotion-api:
         condition: service_healthy
+
+  grafana:
+    build:
+      context: ./observability/grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "13000:3000"
+    depends_on:
+      - prometheus
+  
+  jaeger:
+    image: jaegertracing/all-in-one:1.62.0
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"
+
+  otel-collector:
+    build:
+      context: ./observability/otel-collector
+    depends_on:
+      - jaeger
 
 volumes:
   postgres_data:

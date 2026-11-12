@@ -8,8 +8,11 @@ from fastapi import FastAPI, HTTPException, Header, Request
 from pydantic import BaseModel, Field
 
 from app.metrics import metrics_response, record_request
+from app.telemetry import configure_telemetry
 
 app = FastAPI(title="Fake Customer Profile API")
+
+configure_telemetry(app, "fake-profile-api")
 
 # failure simulation config
 FAILURE_MODE = os.getenv("FAILURE_MODE", "none")

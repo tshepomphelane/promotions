@@ -9,10 +9,14 @@ from app.database import Base, engine, SessionLocal
 from app.models import Customer, CustomerActivity, Promotion
 from app.eligibility import evaluate_eligibility
 
+from app.telemetry import configure_telemetry
+
 app = FastAPI(
     title="Promotion Eligibility API",
     version="1.0.0"
 )
+
+configure_telemetry(app, "promotion-api", engine)
 
 PROFILE_SERVICE_URL = os.getenv(
     "PROFILE_SERVICE_URL",
