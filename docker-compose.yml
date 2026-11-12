@@ -26,7 +26,8 @@ services:
       DELAY_SECONDS: 3
       CONTROL_TOKEN: local-assessment-token
       OTEL_EXPORTER_OTLP_ENDPOINT: otel-collector:4317
-      OTEL_TRACE_SAMPLE_RATIO: 1.0
+      OTEL_TRACE_SAMPLE_RATIO: ${OTEL_TRACE_SAMPLE_RATIO:-0.1}
+      UVICORN_LOG_LEVEL: warning
     ports:
       - "8001:8001"
     healthcheck:
@@ -47,7 +48,8 @@ services:
       DB_POOL_TIMEOUT_SECONDS: 0.2
       RULES_CACHE_TTL_SECONDS: 30
       OTEL_EXPORTER_OTLP_ENDPOINT: otel-collector:4317
-      OTEL_TRACE_SAMPLE_RATIO: 1.0
+      OTEL_TRACE_SAMPLE_RATIO: ${OTEL_TRACE_SAMPLE_RATIO:-0.1}
+      UVICORN_LOG_LEVEL: warning
     ports:
       - "8000:8000"
     healthcheck:
