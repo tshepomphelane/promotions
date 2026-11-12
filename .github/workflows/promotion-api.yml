@@ -1,0 +1,19 @@
+name: promotion-api
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    uses: ./.github/workflows/golden-path-ci.yml
+    with:
+      service_name: promotion-api
+      service_path: services/promotion-api
+      slo_spec: golden-path/slo/service.toml
+      rules_output: observability/prometheus/generated/promotion-api-slo-rules.yml
+      test_args: "-q --ignore=tests/test_api_integration.py"

@@ -12,4 +12,4 @@ window = "28d"
 latency_threshold_seconds = 0.3
 
 owner = "crm"
-runbook = "docs/runbooks/promotion-api.md"
+runbook = "golden-path/runbooks/promotion-api.md"

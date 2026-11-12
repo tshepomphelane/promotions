@@ -1,14 +1,14 @@
 groups:
   - name: promotion_api-slo
     rules:
- - record: promotion_api:request_good:ratio_rate5m
- expr: sum(rate(http_server_request_duration_seconds_bucket{job="promotion-api", route="/customers/{customer_id}/promotions", status_code!~"5..", le="0.3"}[5m])) / sum(rate(http_server_requests_total{job="promotion-api", route="/customers/{customer_id}/promotions"}[5m]))
- - record: promotion_api:request_good:ratio_rate30m
- expr: sum(rate(http_server_request_duration_seconds_bucket{job="promotion-api", route="/customers/{customer_id}/promotions", status_code!~"5..", le="0.3"}[30m])) / sum(rate(http_server_requests_total{job="promotion-api", route="/customers/{customer_id}/promotions"}[30m]))
- - record: promotion_api:request_good:ratio_rate1h
- expr: sum(rate(http_server_request_duration_seconds_bucket{job="promotion-api", route="/customers/{customer_id}/promotions", status_code!~"5..", le="0.3"}[1h])) / sum(rate(http_server_requests_total{job="promotion-api", route="/customers/{customer_id}/promotions"}[1h]))
- - record: promotion_api:request_good:ratio_rate6h
- expr: sum(rate(http_server_request_duration_seconds_bucket{job="promotion-api", route="/customers/{customer_id}/promotions", status_code!~"5..", le="0.3"}[6h])) / sum(rate(http_server_requests_total{job="promotion-api", route="/customers/{customer_id}/promotions"}[6h]))
+      - record: promotion_api:request_good:ratio_rate5m
+        expr: sum(rate(http_server_request_duration_seconds_bucket{job="promotion-api", route="/customers/{customer_id}/promotions", status_code!~"5..", le="0.3"}[5m])) / sum(rate(http_server_requests_total{job="promotion-api", route="/customers/{customer_id}/promotions"}[5m]))
+      - record: promotion_api:request_good:ratio_rate30m
+        expr: sum(rate(http_server_request_duration_seconds_bucket{job="promotion-api", route="/customers/{customer_id}/promotions", status_code!~"5..", le="0.3"}[30m])) / sum(rate(http_server_requests_total{job="promotion-api", route="/customers/{customer_id}/promotions"}[30m]))
+      - record: promotion_api:request_good:ratio_rate1h
+        expr: sum(rate(http_server_request_duration_seconds_bucket{job="promotion-api", route="/customers/{customer_id}/promotions", status_code!~"5..", le="0.3"}[1h])) / sum(rate(http_server_requests_total{job="promotion-api", route="/customers/{customer_id}/promotions"}[1h]))
+      - record: promotion_api:request_good:ratio_rate6h
+        expr: sum(rate(http_server_request_duration_seconds_bucket{job="promotion-api", route="/customers/{customer_id}/promotions", status_code!~"5..", le="0.3"}[6h])) / sum(rate(http_server_requests_total{job="promotion-api", route="/customers/{customer_id}/promotions"}[6h]))
       - alert: PromotionApiErrorBudgetFastBurn
         expr: ((1 - promotion_api:request_good:ratio_rate5m) > 0.0144000) and ((1 - promotion_api:request_good:ratio_rate1h) > 0.0144000)
         for: 2m
@@ -19,7 +19,7 @@ groups:
         annotations:
           summary: "promotion-api is rapidly consuming its error budget"
           description: "The 5m and 1h burn rates exceed 14.4x the 28-day error budget. This consumes 2% of the budget in about one hour."
-          runbook: docs/runbooks/promotion-api.md
+          runbook: golden-path/runbooks/promotion-api.md
       - alert: PromotionApiErrorBudgetSlowBurn
         expr: ((1 - promotion_api:request_good:ratio_rate30m) > 0.0060000) and ((1 - promotion_api:request_good:ratio_rate6h) > 0.0060000)
         for: 15m
@@ -30,4 +30,4 @@ groups:
         annotations:
           summary: "promotion-api is steadily consuming its error budget"
           description: "The 30m and 6h burn rates exceed 6x the 28-day error budget. This consumes 5% of the budget in about six hours."
-          runbook: docs/runbooks/promotion-api.md
+          runbook: golden-path/runbooks/promotion-api.md

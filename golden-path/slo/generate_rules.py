@@ -60,8 +60,8 @@ def generate(spec: dict[str, object]) -> str:
     for period in ("5m", "30m", "1h", "6h"):
         lines.extend(
             [
-                f" - record: {service}:request_good:ratio_rate{period}",
-                f" expr: {ratio_expression(spec, period)}",
+                f"      - record: {service}:request_good:ratio_rate{period}",
+                f"        expr: {ratio_expression(spec, period)}",
             ]
         )
     lines.extend(
