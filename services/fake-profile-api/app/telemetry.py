@@ -29,4 +29,4 @@ def configure_telemetry(app, service_name: str) -> None:
     )
 
     trace.set_tracer_provider(provider)
-    FastAPIInstrumentor.instrument_app(app)
+    FastAPIInstrumentor.instrument_app(app, excluded_urls="health,metrics")

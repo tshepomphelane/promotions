@@ -1,35 +1,61 @@
 import os
-import httpx
 import time
+from types import SimpleNamespace
 
-from fastapi import FastAPI, HTTPException
+import httpx
+from fastapi import FastAPI, HTTPException, Request
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import TimeoutError as PoolTimeoutError
 
-from app.database import Base, engine, SessionLocal
-from app.models import Customer, CustomerActivity, Promotion
+from app.database import Base, SessionLocal, engine
 from app.eligibility import evaluate_eligibility
-
+from app.metrics import (
+    DB_POOL_TIMEOUTS,
+    record_request,
+    render_metrics,
+    route_template,
+)
+from app.models import CustomerActivity, Promotion
 from app.telemetry import configure_telemetry
 
-app = FastAPI(
-    title="Promotion Eligibility API",
-    version="1.0.0"
-)
+app = FastAPI(title="Promotion Eligibility API", version="1.0.0")
 
 configure_telemetry(app, "promotion-api", engine)
 
-PROFILE_SERVICE_URL = os.getenv(
-    "PROFILE_SERVICE_URL",
-    "http://localhost:8001"
-)
+PROFILE_SERVICE_URL = os.getenv("PROFILE_SERVICE_URL", "http://localhost:8001")
+# Must stay under the 300ms SLO latency threshold
+PROFILE_TIMEOUT_SECONDS = float(os.getenv("PROFILE_TIMEOUT_SECONDS", "0.25"))
+# Promotion rules change rarely. 0 disables the cache.
+RULES_CACHE_TTL_SECONDS = float(os.getenv("RULES_CACHE_TTL_SECONDS", "30"))
 
 profile_client = httpx.Client(
-    timeout=httpx.Timeout(1.0),
-    limits=httpx.Limits(
-        max_connections=50,
-        max_keepalive_connections=20
-    )
+    timeout=httpx.Timeout(PROFILE_TIMEOUT_SECONDS),
+    limits=httpx.Limits(max_connections=50, max_keepalive_connections=20),
 )
+
+_rules_cache = {"expires_at": 0.0, "rows": []}
+
+def load_promotions(db):
+    
+    #Active promotion rules, cached to save a DB round trip per request
+    now = time.monotonic()
+    if now < _rules_cache["expires_at"]:
+        return _rules_cache["rows"]
+
+    rows = [
+        SimpleNamespace(
+            id=p.id,
+            description=p.description,
+            discount_percent=p.discount_percent,
+            minimum_purchases=p.minimum_purchases,
+            minimum_spend=p.minimum_spend,
+            active=p.active,
+        )
+        for p in db.query(Promotion).filter(Promotion.active.is_(True)).all()
+    ]
+    _rules_cache["rows"] = rows
+    _rules_cache["expires_at"] = now + RULES_CACHE_TTL_SECONDS
+    return rows
 
 @app.on_event("startup")
 def startup():
@@ -39,96 +65,75 @@ def startup():
 def shutdown():
     profile_client.close()
 
+@app.middleware("http")
+async def request_metrics(request: Request, call_next):
+    started = time.perf_counter()
+    status_code = 500
+    try:
+        response = await call_next(request)
+        status_code = response.status_code
+        return response
+    finally:
+        record_request(
+            method=request.method,
+            route=route_template(request),
+            status_code=status_code,
+            elapsed=time.perf_counter() - started,
+        )
+
 @app.get("/health")
 def health():
     return {"status": "healthy"}
 
+
+@app.get("/metrics", include_in_schema=False)
+def metrics():
+    return render_metrics(engine)
+
 @app.get("/customers/{customer_id}/promotions")
 def get_promotions(customer_id: str):
-
-    # Call external dependency
+    # Dependency call first, so a slow profile service never holds DB connection.
     try:
         response = profile_client.get(
             f"{PROFILE_SERVICE_URL}/customers/{customer_id}/status"
         )
-
         if response.status_code == 404:
-            raise HTTPException(
-                status_code=404,
-                detail="Customer not found"
-            )
-
+            raise HTTPException(status_code=404, detail="Customer not found")
         response.raise_for_status()
         profile = response.json()
-
     except HTTPException:
         raise
-
     except httpx.HTTPError:
         raise HTTPException(
-            status_code=503,
-            detail="Customer profile service unavailable"
+            status_code=503, detail="Customer profile service unavailable"
         )
 
     if profile.get("status") != "ACTIVE":
-        raise HTTPException(
-            status_code=403,
-            detail="Customer is not eligible"
-        )
+        raise HTTPException(status_code=403, detail="Customer is not eligible")
 
-    # then get db database session
     try:
         with SessionLocal() as db:
-
-            customer = db.query(Customer).filter(
-                Customer.id == customer_id
-            ).first()
-
-            if not customer:
-                raise HTTPException(
-                    status_code=404,
-                    detail="Customer not found"
-                )
-
-            activity = db.query(CustomerActivity).filter(
-                CustomerActivity.customer_id == customer_id
-            ).first()
-
+            activity = (
+                db.query(CustomerActivity)
+                .filter(CustomerActivity.customer_id == customer_id)
+                .first()
+            )
             if not activity:
-                raise HTTPException(
-                    status_code=404,
-                    detail="Customer activity not found"
-                )
+                raise HTTPException(status_code=404, detail="Customer not found")
 
-            promotions = db.query(Promotion).filter(
-                Promotion.active.is_(True)
-            ).all()
-
-            eligible = evaluate_eligibility(activity,promotions)
-
-            return {
-                "customer_id": customer_id,
-                "eligible_promotions": eligible
-            }
-
-    except SQLAlchemyError:
+            promotions = load_promotions(db)
+            eligible = evaluate_eligibility(activity, promotions)
+    except PoolTimeoutError:
+        # Pool exhausted: fail fast and tell clients to back off.
+        DB_POOL_TIMEOUTS.inc()
         raise HTTPException(
             status_code=503,
-            detail="Database temporarily unavailable"
+            detail="Database busy",
+            headers={"Retry-After": "1"},
         )
-    
-# @app.middleware("http")
-# async def request_metrics(request, call_next):
-#     started = time.perf_counter()
-#     status_code = 500
-#     try:
-#         response = await call_next(request)
-#         status_code = response.status_code
-#         return response
-#     finally:
-#         record_request(
-#             method=request.method,
-#             route=route_template(request),
-#             status_code=status_code,
-#             elapsed=time.perf_counter() - started,
-#         )
+    except SQLAlchemyError:
+        raise HTTPException(
+            status_code=503, detail="Database temporarily unavailable"
+        )
+
+    return {"customer_id": customer_id, "eligible_promotions": eligible}

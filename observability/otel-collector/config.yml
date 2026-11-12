@@ -15,6 +15,12 @@ processors:
     timeout: 5s
     send_batch_size: 512
 
+exporters:
+  otlp/jaeger:
+    endpoint: jaeger:4317
+    tls:
+      insecure: true
+
 service:
   pipelines:
     traces:
