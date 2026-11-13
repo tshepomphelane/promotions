@@ -31,3 +31,25 @@ groups:
           summary: "promotion-api is steadily consuming its error budget"
           description: "The 30m and 6h burn rates exceed 6x the 28-day error budget. This consumes 5% of the budget in about six hours."
           runbook: golden-path/runbooks/promotion-api.md
+      - alert: PromotionApiDown
+        expr: up{job="promotion-api"} == 0 or absent(up{job="promotion-api"})
+        for: 2m
+        labels:
+          severity: page
+          service: promotion-api
+          owner: crm
+        annotations:
+          summary: "promotion-api is down or not being scraped"
+          description: "Prometheus cannot scrape the service, so the SLO alerts have no data. Check the service and the scrape limits."
+          runbook: golden-path/runbooks/promotion-api.md
+      - alert: PromotionApiDbPoolExhausted
+        expr: sum(rate(db_pool_checkout_timeouts_total{job="promotion-api"}[2m])) > 0
+        for: 1m
+        labels:
+          severity: page
+          service: promotion-api
+          owner: crm
+        annotations:
+          summary: "promotion-api cannot get database connections"
+          description: "Requests are failing because no database connection became free within the pool timeout. Connections are being held too long by slow queries or locks."
+          runbook: golden-path/runbooks/promotion-api.md

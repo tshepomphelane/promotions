@@ -13,3 +13,5 @@ latency_threshold_seconds = 0.3
 
 owner = "crm"
 runbook = "golden-path/runbooks/promotion-api.md"
+
+db_pool = true   # service exports db_pool_* metrics: adds the pool exhaustion alert

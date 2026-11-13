@@ -20,6 +20,10 @@ DB_POOL_CHECKED_IN = Gauge("db_pool_checked_in", "Connections currently idle in 
 DB_POOL_CHECKED_OUT = Gauge("db_pool_checked_out", "Connections currently checked out.")
 DB_POOL_OVERFLOW = Gauge("db_pool_overflow", "Current SQLAlchemy pool overflow connections.")
 DB_POOL_TIMEOUTS = Counter("db_pool_checkout_timeouts_total", "Database pool checkout timeouts.")
+RULES_STALE_SERVED = Counter(
+    "rules_cache_stale_served_total",
+    "Times stale promotion rules were served because a refresh failed.",
+)
 
 def route_template(request: Request) -> str:
     # framework route template

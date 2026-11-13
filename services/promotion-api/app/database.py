@@ -12,6 +12,8 @@ DATABASE_URL = os.getenv (
 DB_POOL_SIZE = int(os.getenv("DB_POOL_SIZE", "5"))
 DB_MAX_OVERFLOW = int(os.getenv("DB_MAX_OVERFLOW", "0"))
 DB_POOL_TIMEOUT_SECONDS = float(os.getenv("DB_POOL_TIMEOUT_SECONDS", "0.2"))
+# Postgres cancels any statement (including lock waits) running longer than this.
+DB_STATEMENT_TIMEOUT_MS = int(os.getenv("DB_STATEMENT_TIMEOUT_MS", "500"))
 
 engine = create_engine (
     DATABASE_URL, 
@@ -19,6 +21,12 @@ engine = create_engine (
     max_overflow=DB_MAX_OVERFLOW, # no additional temp connections
     pool_timeout=DB_POOL_TIMEOUT_SECONDS, # request will not wait for connections
     pool_pre_ping=True, # check connection before using it
+
+    connect_args=(
+        {"options": f"-c statement_timeout={DB_STATEMENT_TIMEOUT_MS}"}
+        if DB_STATEMENT_TIMEOUT_MS > 0
+        else {}
+    ),
 )
 
 SessionLocal = sessionmaker (

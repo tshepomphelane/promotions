@@ -1,6 +1,5 @@
 import os
 import time
-from types import SimpleNamespace
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request
@@ -15,8 +14,9 @@ from app.metrics import (
     render_metrics,
     route_template,
 )
-from app.models import CustomerActivity, Promotion
+from app.models import CustomerActivity
 from app.telemetry import configure_telemetry
+from app.rules_cache import load_promotions
 
 app = FastAPI(title="Promotion Eligibility API", version="1.0.0")
 
@@ -25,37 +25,11 @@ configure_telemetry(app, "promotion-api", engine)
 PROFILE_SERVICE_URL = os.getenv("PROFILE_SERVICE_URL", "http://localhost:8001")
 # Must stay under the 300ms SLO latency threshold
 PROFILE_TIMEOUT_SECONDS = float(os.getenv("PROFILE_TIMEOUT_SECONDS", "0.25"))
-# Promotion rules change rarely. 0 disables the cache.
-RULES_CACHE_TTL_SECONDS = float(os.getenv("RULES_CACHE_TTL_SECONDS", "30"))
 
 profile_client = httpx.Client(
     timeout=httpx.Timeout(PROFILE_TIMEOUT_SECONDS),
     limits=httpx.Limits(max_connections=50, max_keepalive_connections=20),
 )
-
-_rules_cache = {"expires_at": 0.0, "rows": []}
-
-def load_promotions(db):
-    
-    #Active promotion rules, cached to save a DB round trip per request
-    now = time.monotonic()
-    if now < _rules_cache["expires_at"]:
-        return _rules_cache["rows"]
-
-    rows = [
-        SimpleNamespace(
-            id=p.id,
-            description=p.description,
-            discount_percent=p.discount_percent,
-            minimum_purchases=p.minimum_purchases,
-            minimum_spend=p.minimum_spend,
-            active=p.active,
-        )
-        for p in db.query(Promotion).filter(Promotion.active.is_(True)).all()
-    ]
-    _rules_cache["rows"] = rows
-    _rules_cache["expires_at"] = now + RULES_CACHE_TTL_SECONDS
-    return rows
 
 @app.on_event("startup")
 def startup():

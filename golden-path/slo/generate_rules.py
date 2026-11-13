@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 
-# generate Promotheus SLO recording and multi window burn rate alert rules
+# Generate Prometheus SLO recording rules, multi-window burn-rate alerts and
+# basic health alerts from a single service spec (service.toml).
 
 from __future__ import annotations
 
 import argparse
 import tomllib
 from pathlib import Path
+
 
 def ratio_expression(spec: dict[str, object], period: str) -> str:
     labels = f'job="{spec["job"]}", route="{spec["route"]}"'
@@ -25,6 +27,7 @@ def ratio_expression(spec: dict[str, object], period: str) -> str:
         f"{{{labels}}}[{period}]))"
     )
 
+
 def burn_expression(
     service: str,
     period: str,
@@ -36,20 +39,42 @@ def burn_expression(
         f"> {burn_rate * budget:.7f}"
     )
 
+
+def alert(
+    spec: dict[str, object],
+    name: str,
+    expr: str,
+    duration: str,
+    severity: str,
+    summary: str,
+    description: str,
+) -> list[str]:
+    return [
+        f"      - alert: {name}",
+        f"        expr: {expr}",
+        f"        for: {duration}",
+        "        labels:",
+        f"          severity: {severity}",
+        f"          service: {spec['service']}",
+        f"          owner: {spec['owner']}",
+        "        annotations:",
+        f'          summary: "{summary}"',
+        f'          description: "{description}"',
+        f"          runbook: {spec['runbook']}",
+    ]
+
+
 def generate(spec: dict[str, object]) -> str:
-    service = str(spec["service"]).replace("-", "_")
+    name = str(spec["service"])
+    service = name.replace("-", "_")
+    pascal = service.title().replace("_", "")
+    job = str(spec["job"])
     budget = 1 - float(spec["target"])
-    owner = str(spec["owner"])
-    runbook = str(spec["runbook"])
 
     page_short = burn_expression(service, "5m", budget, 14.4)
     page_long = burn_expression(service, "1h", budget, 14.4)
-
     ticket_short = burn_expression(service, "30m", budget, 6)
     ticket_long = burn_expression(service, "6h", budget, 6)
-
-    fast_alert = f"{service.title().replace('_', '')}ErrorBudgetFastBurn"
-    slow_alert = f"{service.title().replace('_', '')}ErrorBudgetSlowBurn"
 
     lines = [
         "groups:",
@@ -64,34 +89,58 @@ def generate(spec: dict[str, object]) -> str:
                 f"        expr: {ratio_expression(spec, period)}",
             ]
         )
-    lines.extend(
-        [
-            f"      - alert: {fast_alert}",
-            f"        expr: ({page_short}) and ({page_long})",
-            "        for: 2m",
-            "        labels:",
-            "          severity: page",
-            f"          service: {spec['service']}",
-            f"          owner: {owner}",
-            "        annotations:",
-            f'          summary: "{spec["service"]} is rapidly consuming its error budget"',
-            '          description: "The 5m and 1h burn rates exceed 14.4x the 28-day error budget. This consumes 2% of the budget in about one hour."',
-            f"          runbook: {runbook}",
-            f"      - alert: {slow_alert}",
-            f"        expr: ({ticket_short}) and ({ticket_long})",
-            "        for: 15m",
-            "        labels:",
-            "          severity: ticket",
-            f"          service: {spec['service']}",
-            f"          owner: {owner}",
-            "        annotations:",
-            f'          summary: "{spec["service"]} is steadily consuming its error budget"',
-            '          description: "The 30m and 6h burn rates exceed 6x the 28-day error budget. This consumes 5% of the budget in about six hours."',
-            f"          runbook: {runbook}",
-        ]
+
+    # Multi-window burn-rate alerts
+    lines += alert(
+        spec,
+        f"{pascal}ErrorBudgetFastBurn",
+        f"({page_short}) and ({page_long})",
+        "2m",
+        "page",
+        f"{name} is rapidly consuming its error budget",
+        "The 5m and 1h burn rates exceed 14.4x the 28-day error budget. "
+        "This consumes 2% of the budget in about one hour.",
+    )
+    lines += alert(
+        spec,
+        f"{pascal}ErrorBudgetSlowBurn",
+        f"({ticket_short}) and ({ticket_long})",
+        "15m",
+        "ticket",
+        f"{name} is steadily consuming its error budget",
+        "The 30m and 6h burn rates exceed 6x the 28-day error budget. "
+        "This consumes 5% of the budget in about six hours.",
     )
 
+    # Total outage: no traffic means the ratios above return no data,
+    # so alert on the scrape itself.
+    lines += alert(
+        spec,
+        f"{pascal}Down",
+        f'up{{job="{job}"}} == 0 or absent(up{{job="{job}"}})',
+        "2m",
+        "page",
+        f"{name} is down or not being scraped",
+        "Prometheus cannot scrape the service, so the SLO alerts have no data. "
+        "Check the service and the scrape limits.",
+    )
+
+    # Opt-in saturation alert for services that export db_pool_* metrics.
+    if spec.get("db_pool", False):
+        lines += alert(
+            spec,
+            f"{pascal}DbPoolExhausted",
+            f'sum(rate(db_pool_checkout_timeouts_total{{job="{job}"}}[2m])) > 0',
+            "1m",
+            "page",
+            f"{name} cannot get database connections",
+            "Requests are failing because no database connection became free "
+            "within the pool timeout. Connections are being held too long by "
+            "slow queries or locks.",
+        )
+
     return "\n".join(lines) + "\n"
+
 
 def main() -> None:
     parser = argparse.ArgumentParser()
@@ -126,6 +175,6 @@ def main() -> None:
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(generate(spec), encoding="utf-8")
 
+
 if __name__ == "__main__":
     main()
-    

@@ -57,6 +57,8 @@ def main() -> int:
     runbook = Path(spec.get("runbook", ""))
     if not runbook.is_file() or runbook.stat().st_size == 0:
         errors.append(f"runbook missing or empty: {runbook}")
+    elif "FILL IN" in runbook.read_text(encoding="utf-8"):
+        errors.append(f"runbook still contains FILL IN placeholders: {runbook}")
 
     if errors:
         for error in errors:
